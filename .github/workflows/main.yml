@@ -1,0 +1,41 @@
+name: Build N960N Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev gcc-aarch64-linux-gnu build-essential
+
+      - name: Build Kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export SUBARCH=arm64
+          make crownlte_defconfig
+          # Add NetHunter / wifi patches
+          ./scripts/config --enable CONFIG_PACKET
+          ./scripts/config --enable CONFIG_CFG80211_WEXT
+          ./scripts/config --enable CONFIG_MAC80211
+          ./scripts/config --enable CONFIG_RFKILL
+          ./scripts/config --module CONFIG_RTL8192CU
+          ./scripts/config --module CONFIG_RTL8187
+          ./scripts/config --module CONFIG_RT2X00
+          make -j$(nproc) Image dtb.img
+          mkdir -p out
+          cp arch/arm64/boot/Image out/
+          cp arch/arm64/boot/dtb.img out/ || true
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: N960N-Kernel-Image
+          path: out/
