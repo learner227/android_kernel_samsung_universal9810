@@ -1,0 +1,40 @@
+name: Build N960N Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev build-essential gcc-aarch64-linux-gnu git
+
+      - name: Find defconfig
+        run: |
+          ls arch/arm64/configs/ | grep -i crown
+          ls arch/arm64/configs/ | head -20
+
+      - name: Build
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make exynos9810-crownlte_defconfig || make crownlte_defconfig || make exynos9810_defconfig
+          ./scripts/config --enable CONFIG_PACKET || true
+          ./scripts/config --enable CONFIG_CFG80211 || true
+          ./scripts/config --enable CONFIG_MAC80211 || true
+          ./scripts/config --module CONFIG_RTL8192CU || true
+          make -j4 Image || make -j4
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: N960N-Kernel-Image
+          path: |
+            arch/arm64/boot/Image
+            arch/arm64/boot/*.img
+            arch/arm64/boot/dtb*
