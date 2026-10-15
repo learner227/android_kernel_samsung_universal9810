@@ -5,36 +5,38 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install tools
+      - name: Install old GCC
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev build-essential gcc-aarch64-linux-gnu libncurses-dev
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev build-essential gcc-9 g++-9 libncurses5-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 9
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 9
 
-      - name: Prepare config
+      - name: Get Android 4.9 toolchain
+        run: |
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 toolchain
+          echo "$(pwd)/toolchain/bin" >> $GITHUB_PATH
+
+      - name: Fix dtc bug
+        run: |
+          # fix multiple definition of yylloc for new gcc
+          sed -i 's/YYLTYPE yylloc;/extern YYLTYPE yylloc;/g' scripts/dtc/dtc-lexer.lex.c_shipped || true
+          sed -i 's/YYLTYPE yylloc;/extern YYLTYPE yylloc;/g' scripts/dtc/dtc-parser.tab.c_shipped || true
+          sed -i 's/YYLTYPE yylloc;/extern YYLTYPE yylloc;/g' scripts/dtc/dtc-parser.tab.h_shipped || true
+
+      - name: Build
         run: |
           export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          # Use original defconfig only, no extra config edits
-          if [ -f arch/arm64/configs/exynos9810-crownlte_defconfig ]; then
-            make exynos9810-crownlte_defconfig
-          else
-            ls arch/arm64/configs/ | head -n 20
-            make crownlte_defconfig || make exynos9810_defconfig
-          fi
-          # Auto fill new options with defaults (fixes your error)
-          yes "" | make oldconfig
+          export CROSS_COMPILE=aarch64-linux-android-
+          export CFLAGS="-fcommon"
+          export HOSTCFLAGS="-fcommon"
+          make exynos9810-crownlte_defconfig
           make olddefconfig
-
-      - name: Build Image
-        run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
           make -j$(nproc) Image
-          ls -lh arch/arm64/boot/
 
       - name: Upload
         uses: actions/upload-artifact@v4
